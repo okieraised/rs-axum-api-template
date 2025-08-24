@@ -1,0 +1,13 @@
+mod healthcheck;
+
+use crate::web::api::app_state::AppState;
+use crate::web::api::v1::healthcheck::{HealthcheckDeps, new_healthcheck_router};
+use axum::Router;
+
+pub fn register_v1_routers(state: AppState) -> Router {
+    let healthcheck_state = HealthcheckDeps {
+        healthcheck: state.healthcheck.clone(),
+    };
+
+    Router::new().nest("/health", new_healthcheck_router(healthcheck_state))
+}
