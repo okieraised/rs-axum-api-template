@@ -45,4 +45,7 @@ async-trait = "0.1.89"
 openidconnect = { version = "4.0.1", default-features = false, features = ["reqwest", "native-tls"] }
 moka = { version = "0.12.10", features = ["future"] }
 dashmap = "6.1.0"
+bb8 = "0.9.0"
+diesel = { version = "2.2.12", features = ["postgres"] }
+diesel-async = { version = "0.6.1", features = ["postgres", "tokio", "pool", "bb8"] }
 
