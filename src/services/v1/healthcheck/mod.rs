@@ -9,18 +9,42 @@ impl HealthcheckService {}
 #[async_trait]
 impl HealthcheckTrait for HealthcheckService {
     async fn health(&self) -> BaseOutput {
-        todo!()
+        BaseOutput {
+            code: "OK".to_string(),
+            message: "OK".to_string(),
+            data: None,
+            count: None,
+            meta: None,
+        }
     }
 
     async fn live(&self) -> BaseOutput {
-        todo!()
+        BaseOutput {
+            code: "OK".to_string(),
+            message: "OK".to_string(),
+            data: None,
+            count: None,
+            meta: None,
+        }
     }
 
     async fn ready(&self) -> BaseOutput {
-        todo!()
+        BaseOutput {
+            code: "OK".to_string(),
+            message: "OK".to_string(),
+            data: None,
+            count: None,
+            meta: None,
+        }
     }
 
     async fn started(&self) -> BaseOutput {
-        todo!()
+        BaseOutput {
+            code: "OK".to_string(),
+            message: "OK".to_string(),
+            data: None,
+            count: None,
+            meta: None,
+        }
     }
 }

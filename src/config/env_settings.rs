@@ -40,6 +40,30 @@ impl Default for OtelConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct OIDCConfig {
+    pub enabled: bool,
+    pub client_id: String,
+    pub client_secret: String,
+    pub scopes: String,
+    pub redirect_url: String,
+    pub realm: String,
+}
+
+impl Default for OIDCConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            client_id: "".to_string(),
+            client_secret: "".to_string(),
+            scopes: "".to_string(),
+            redirect_url: "".to_string(),
+            realm: "".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Settings {
     #[serde(default)]
