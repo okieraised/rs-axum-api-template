@@ -28,7 +28,6 @@ impl Default for HTTPConfig {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(default)]
 pub struct OtelConfig {
-    /// Otel URI
     pub(crate) uri: String,
 }
 
@@ -36,6 +35,22 @@ impl Default for OtelConfig {
     fn default() -> Self {
         Self {
             uri: "localhost:4317".to_string(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(default)]
+pub struct DatabaseConfig {
+    pub url: String,
+    pub max_connections: u32,
+}
+
+impl Default for DatabaseConfig {
+    fn default() -> Self {
+        Self {
+            url: "".to_string(),
+            max_connections: 0,
         }
     }
 }
@@ -70,6 +85,8 @@ pub struct Settings {
     pub server: HTTPConfig,
     #[serde(default)]
     pub otel: OtelConfig,
+    #[serde(default)]
+    pub database: DatabaseConfig,
 }
 
 impl Settings {

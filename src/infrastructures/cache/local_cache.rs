@@ -1,8 +1,7 @@
-// src/cache_registry.rs
 use dashmap::DashMap;
 use moka::future::Cache;
 use once_cell::sync::OnceCell;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::{sync::Arc, time::Duration};
 
@@ -14,8 +13,14 @@ pub struct NamespaceConfig {
     pub max_capacity: u64,
 }
 impl NamespaceConfig {
-    pub fn new(name: impl Into<String>, ttl: Duration, max_capacity: u64) -> Self {
-        Self { name: name.into(), ttl, max_capacity }
+    pub fn new(
+        name: impl Into<String>, ttl: Duration, max_capacity: u64,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            ttl,
+            max_capacity,
+        }
     }
 }
 
@@ -31,11 +36,17 @@ static REGISTRY: OnceCell<Arc<CacheRegistry>> = OnceCell::new();
 impl CacheRegistry {
     /// Initialize the singleton registry (empty). Safe to call many times; first wins.
     pub fn init() -> &'static Arc<Self> {
-        REGISTRY.get_or_init(|| Arc::new(Self { caches: DashMap::new() }))
+        REGISTRY.get_or_init(|| {
+            Arc::new(Self {
+                caches: DashMap::new(),
+            })
+        })
     }
 
     /// Initialize the singleton and eagerly create namespaces.
-    pub fn init_with(configs: impl IntoIterator<Item = NamespaceConfig>) -> &'static Arc<Self> {
+    pub fn init_with(
+        configs: impl IntoIterator<Item = NamespaceConfig>,
+    ) -> &'static Arc<Self> {
         let reg = Self::init();
         for cfg in configs {
             reg.ensure_namespace(cfg.name, cfg.ttl, cfg.max_capacity);
@@ -52,10 +63,7 @@ impl CacheRegistry {
 
     /// Create (or no-op if exists) a namespace with given TTL and capacity.
     pub fn ensure_namespace(
-        &self,
-        ns: impl Into<String>,
-        ttl: Duration,
-        max_capacity: u64,
+        &self, ns: impl Into<String>, ttl: Duration, max_capacity: u64,
     ) {
         let ns = ns.into();
         if self.caches.contains_key(&ns) {
@@ -71,10 +79,7 @@ impl CacheRegistry {
 
     /// Store any JSON-serializable value under `<ns>/<key>`.
     pub async fn put_json<V: Serialize>(
-        &self,
-        ns: &str,
-        key: impl Into<String>,
-        value: &V,
+        &self, ns: &str, key: impl Into<String>, value: &V,
     ) -> Result<(), serde_json::Error> {
         let cache = self
             .caches
@@ -86,12 +91,7 @@ impl CacheRegistry {
     }
 
     /// Store a raw `serde_json::Value`.
-    pub async fn put_raw(
-        &self,
-        ns: &str,
-        key: impl Into<String>,
-        value: Value,
-    ) {
+    pub async fn put_raw(&self, ns: &str, key: impl Into<String>, value: Value) {
         let cache = self
             .caches
             .get(ns)
@@ -101,20 +101,17 @@ impl CacheRegistry {
 
     /// Get and deserialize into any type.
     pub async fn get_json<T: DeserializeOwned>(
-        &self,
-        ns: &str,
-        key: &str,
+        &self, ns: &str, key: &str,
     ) -> Option<T> {
         let cache = self.caches.get(ns)?;
-        cache.get(key).await.and_then(|v| serde_json::from_value(v).ok())
+        cache
+            .get(key)
+            .await
+            .and_then(|v| serde_json::from_value(v).ok())
     }
 
     /// Get the raw JSON value (if present).
-    pub async fn get_raw(
-        &self,
-        ns: &str,
-        key: &str,
-    ) -> Option<Value> {
+    pub async fn get_raw(&self, ns: &str, key: &str) -> Option<Value> {
         let cache = self.caches.get(ns)?;
         cache.get(key).await
     }

@@ -9,6 +9,7 @@ use axum::{
 };
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
+use serde::ser::Serializer;
 use serde_json::{Map, Value, json};
 use tower_layer::Layer;
 use tower_service::Service;
@@ -46,9 +47,19 @@ pub struct Pagination {
     pub total_pages: i32,
 }
 
+/// Serialize `data` as `{}` when it would otherwise be `null`.
+fn serialize_data_or_empty<T: Serialize, S: Serializer>(data: &T, ser: S) -> Result<S::Ok, S::Error> {
+    let mut v = serde_json::to_value(data).map_err(serde::ser::Error::custom)?;
+    if v.is_null() {
+        v = Value::Object(Map::new());
+    }
+    v.serialize(ser)
+}
+
 /// Response is a generic API envelope.
 /// `server_time` is Unix millis; `server_time_iso` is RFC3339Nano (UTC).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound(serialize = "T: Serialize"))]
 pub struct Response<T> {
     #[serde(rename = "request_id")]
     pub request_id: String,
@@ -60,6 +71,7 @@ pub struct Response<T> {
     pub server_time_iso: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub count: Option<i32>,
+    #[serde(serialize_with = "serialize_data_or_empty")]
     pub data: T,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agg: Option<Value>,
@@ -243,24 +255,6 @@ pub fn write_problem_json(
     );
     (status, headers, Json(payload)).into_response()
 }
-
-// /// Extract X-Request-ID (or generate one).
-// pub fn request_id_from_headers(headers: &mut HeaderMap) -> String {
-//     // headers
-//     //     .get(HEADER_X_REQUEST_ID)
-//     //     .and_then(|v| v.to_str().ok())
-//     //     .map(|s| s.to_string())
-//     //     .unwrap_or_else(|| Uuid::new_v4().to_string())
-//
-//     if let Some(v) = headers.get(HEADER_X_REQUEST_ID).and_then(|v| v.to_str().ok()) {
-//         return v.to_string();
-//     }
-//     let rid = Uuid::new_v4().to_string();
-//     if let Ok(hv) = HeaderValue::from_str(&rid) {
-//         headers.insert(HEADER_X_REQUEST_ID, hv);
-//     }
-//     rid
-// }
 
 fn build_json_response<T: Serialize>(
     status: StatusCode, request_id: Option<&str>, payload: &T,

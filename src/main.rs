@@ -8,89 +8,63 @@ mod middlewares;
 mod services;
 mod web;
 
-use crate::common::api_response;
-use crate::common::api_response::{Response, write_problem_json};
+use crate::domains::authentication::AuthenticationTrait;
+use crate::domains::health::HealthcheckTrait;
+use crate::infrastructures::cache::local_cache::CacheRegistry;
+use crate::infrastructures::database;
+use crate::infrastructures::database::{DbPool, init_database_connection};
 use crate::infrastructures::log::logger::setup_logger;
 use crate::infrastructures::otel::tracer::init_tracer_provider;
-use crate::middlewares::not_found_mw::not_found_middleware;
-use crate::middlewares::recovery_mw::RecoveryLayer;
-use crate::middlewares::request_id_mw::{
-    RequestIdLayer, request_id_from_headers,
-};
-use crate::middlewares::request_logging_mw::RequestLoggingLayer;
-use crate::middlewares::timeout_mw::TimeoutLayer;
-use axum::{Router, http::StatusCode, routing::get};
+use crate::services::v1::authentication::AuthenticationService;
+use crate::services::v1::healthcheck::HealthcheckService;
+use crate::web::api::app_state::AppState;
+use crate::web::api::router::register_routers;
+use anyhow::Error;
 use log::info;
-use std::time::Duration;
-use tokio::{signal, time};
+use std::sync::Arc;
+use tokio::signal;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Error> {
     setup_logger();
-    let provider = init_tracer_provider().unwrap();
+
+    info!("Started initializing tracer provider");
+    let provider = init_tracer_provider()?;
     opentelemetry::global::set_tracer_provider(provider);
+    let tracer = Arc::new(opentelemetry::global::tracer("api"));
+    info!("Completed initializing tracer provider");
 
-    info!("start");
-
-    let app = Router::new()
-        .route("/ok", get(ok_handler))
-        .route("/err", get(err_handler))
-        .route("/timeout", get(timeout_handler))
-        .layer(TimeoutLayer::new(Duration::from_secs(2)))
-        .layer(RequestLoggingLayer::default())
-        .layer(RecoveryLayer::default())
-        .layer(RequestIdLayer::default())
-        .fallback(not_found_middleware);
-
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8880").await.unwrap();
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
+    info!("Started initializing database connection");
+    let url: &str =
+        "postgresql://postgres:%40@localhost:15432/mmm";
+    init_database_connection(&url, 5)
         .await
-        .unwrap();
-}
+        .expect("Failed to initialize database connection");
+    let db_pool: &'static DbPool = database::pool();
+    info!("Completed initializing database connection");
 
-async fn ok_handler(
-    mut headers: http::HeaderMap,
-) -> impl axum::response::IntoResponse {
-    let req_id = request_id_from_headers(&mut headers);
+    info!("Started initializing local cache");
+    CacheRegistry::init();    
+    let local_caches: Arc<CacheRegistry> = CacheRegistry::global().clone();
+    info!("Completed initializing local cache");
 
-    Response::<serde_json::Value>::new_with_request_id(req_id)
-        .populate(
-            "OK",
-            "All good",
-            serde_json::json!({"hello":"world"}),
-            None,
-            None,
-        )
-        .with_status(StatusCode::CREATED)
-}
+    // Initialize services
+    let health_svc: Arc<dyn HealthcheckTrait> =
+        Arc::new(HealthcheckService::new());
+    let auth_svc: Arc<dyn AuthenticationTrait> =
+        Arc::new(AuthenticationService::new());
 
-async fn err_handler() -> impl axum::response::IntoResponse {
-    write_problem_json(
-        StatusCode::BAD_REQUEST,
-        "https://example.com/problems/validation",
-        "Invalid input",
-        "The 'name' field is required.",
-        "/err",
-    )
-}
+    let state =
+        AppState::new(health_svc, auth_svc, db_pool, tracer, local_caches);
 
-async fn timeout_handler(
-    mut headers: http::HeaderMap,
-) -> impl axum::response::IntoResponse {
-    let req_id = request_id_from_headers(&mut headers);
+    let routers = register_routers(state);
 
-    time::sleep(Duration::from_secs(60)).await;
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8880").await?;
+    axum::serve(listener, routers)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
-    Response::<serde_json::Value>::new_with_request_id(req_id)
-        .populate(
-            "OK",
-            "All good",
-            serde_json::json!({"hello":"world"}),
-            None,
-            None,
-        )
-        .with_status(StatusCode::CREATED)
+    Ok(())
 }
 
 async fn shutdown_signal() {

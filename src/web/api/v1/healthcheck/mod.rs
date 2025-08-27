@@ -7,17 +7,29 @@ use axum::response::IntoResponse;
 use axum::routing::get;
 use http::{HeaderMap, StatusCode};
 use std::sync::Arc;
+use log::Log;
+use opentelemetry::global::BoxedTracer;
 
 #[derive(Clone)]
 pub struct HealthcheckDeps {
     pub healthcheck: Arc<dyn HealthcheckTrait>,
-    // pub tracer: Tracer,
-    // pub logger: Arc<Logger>,
+    pub tracer: Arc<BoxedTracer>,
+    pub logger: &'static dyn Log,
+}
+
+impl HealthcheckDeps {
+    pub fn new(healthcheck: Arc<dyn HealthcheckTrait>, tracer: Arc<BoxedTracer>, logger: &'static dyn Log) -> Self {
+        HealthcheckDeps {
+            healthcheck,
+            tracer,
+            logger,
+        }
+    }
 }
 
 pub fn new_healthcheck_router(state: HealthcheckDeps) -> Router {
     Router::new()
-        .route("", get(health))
+        .route("/", get(health))
         .route("/live", get(live))
         .route("/ready", get(ready))
         .route("/started", get(started))
@@ -28,7 +40,7 @@ pub async fn health(
     mut headers: HeaderMap, State(state): State<HealthcheckDeps>,
 ) -> impl IntoResponse {
     let req_id = request_id_from_headers(&mut headers);
-    let result = state.healthcheck.health().await;
+    let result = state.healthcheck.health().await.unwrap();
 
     Response::new_with_request_id(req_id)
         .with_code(result.code)
@@ -41,7 +53,7 @@ pub async fn live(
     mut headers: HeaderMap, State(state): State<HealthcheckDeps>,
 ) -> impl IntoResponse {
     let req_id = request_id_from_headers(&mut headers);
-    let result = state.healthcheck.live().await;
+    let result = state.healthcheck.live().await.unwrap();
     Response::new_with_request_id(req_id)
         .with_code(result.code)
         .with_message(result.message)
@@ -53,7 +65,7 @@ pub async fn ready(
     mut headers: HeaderMap, State(state): State<HealthcheckDeps>,
 ) -> impl IntoResponse {
     let req_id = request_id_from_headers(&mut headers);
-    let result = state.healthcheck.ready().await;
+    let result = state.healthcheck.ready().await.unwrap();
     Response::new_with_request_id(req_id)
         .with_code(result.code)
         .with_message(result.message)
@@ -65,7 +77,7 @@ pub async fn started(
     mut headers: HeaderMap, State(state): State<HealthcheckDeps>,
 ) -> impl IntoResponse {
     let req_id = request_id_from_headers(&mut headers);
-    let result = state.healthcheck.started().await;
+    let result = state.healthcheck.started().await.unwrap();
     Response::new_with_request_id(req_id)
         .with_code(result.code)
         .with_message(result.message)

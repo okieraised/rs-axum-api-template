@@ -1,2 +1,2 @@
+pub mod authentication;
 pub mod healthcheck;
-mod authentication;
